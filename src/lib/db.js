@@ -23,11 +23,20 @@ db.version(1).stores({
   settings: 'key'
 });
 
-/** Dictionary URL templates use `###` as the placeholder for the looked-up term (Lute convention). */
+// v2: per-paragraph notes, so readers can jot something down without leaving the page.
+db.version(2).stores({
+  notes: '++id, bookId, [bookId+pageIndex], updatedAt'
+});
+
+/**
+ * Dictionary URL templates use `###` as the placeholder for the looked-up term (Lute convention).
+ * `translateTo` is the target language for the built-in machine translation lookup.
+ */
 export const DEFAULT_LANGUAGES = [
   {
     name: 'English',
     code: 'en',
+    translateTo: 'tr',
     rightToLeft: false,
     dictionaries: [
       { name: 'Wiktionary', url: 'https://en.m.wiktionary.org/wiki/###', embed: true },
@@ -38,6 +47,7 @@ export const DEFAULT_LANGUAGES = [
   {
     name: 'German',
     code: 'de',
+    translateTo: 'tr',
     rightToLeft: false,
     dictionaries: [
       { name: 'Wiktionary', url: 'https://de.m.wiktionary.org/wiki/###', embed: true },
@@ -47,6 +57,7 @@ export const DEFAULT_LANGUAGES = [
   {
     name: 'Spanish',
     code: 'es',
+    translateTo: 'tr',
     rightToLeft: false,
     dictionaries: [
       { name: 'Wiktionary', url: 'https://es.m.wiktionary.org/wiki/###', embed: true },
@@ -121,10 +132,40 @@ export async function markUnknownAsKnown(languageId, words) {
 }
 
 export async function deleteBook(bookId) {
-  await db.transaction('rw', db.books, db.pages, async () => {
+  await db.transaction('rw', db.books, db.pages, db.notes, async () => {
     await db.pages.where('bookId').equals(bookId).delete();
+    await db.notes.where('bookId').equals(bookId).delete();
     await db.books.delete(bookId);
   });
+}
+
+/** Marks a paragraph as the reader's current resume point ("kaldığım yer"). */
+export async function setResumeAnchor(bookId, pageIndex, paragraphIndex) {
+  await db.books.update(bookId, { resumeAnchor: { page: pageIndex, paragraph: paragraphIndex } });
+}
+
+export async function clearResumeAnchor(bookId) {
+  await db.books.update(bookId, { resumeAnchor: null });
+}
+
+export function notesForBook(bookId) {
+  return db.notes.where('bookId').equals(bookId).toArray();
+}
+
+export async function saveNote(bookId, pageIndex, paragraphIndex, excerpt, text) {
+  const now = Date.now();
+  const existing = await db.notes.where({ bookId, pageIndex, paragraphIndex }).first();
+  if (existing) {
+    await db.notes.update(existing.id, { text, excerpt, updatedAt: now });
+    return { ...existing, text, excerpt, updatedAt: now };
+  }
+  const row = { bookId, pageIndex, paragraphIndex, excerpt, text, createdAt: now, updatedAt: now };
+  row.id = await db.notes.add(row);
+  return row;
+}
+
+export async function deleteNote(id) {
+  await db.notes.delete(id);
 }
 
 /** Asks the browser not to evict our IndexedDB data (important on iOS). */

@@ -71,6 +71,7 @@
     languages.push({
       name: '',
       code: '',
+      translateTo: 'tr',
       rightToLeft: false,
       dictionaries: [{ name: 'Wiktionary', url: 'https://en.m.wiktionary.org/wiki/###', embed: true }]
     });
@@ -102,8 +103,10 @@
 
   <h2>Languages & dictionaries</h2>
   <p class="muted small">
-    In dictionary URLs, <code>###</code> is replaced with the selected word. "Embed" shows the dictionary
-    inside the reader; many sites (e.g. Tureng) refuse to be embedded, so open those in a new tab.
+    "Translate to" is the language tapping a word translates into automatically (a free machine
+    translation, shown as a suggestion you can accept or edit). In dictionary URLs, <code>###</code> is
+    replaced with the selected word. "Embed" shows the dictionary inside the reader; many sites (e.g.
+    Tureng) refuse to be embedded, so open those in a new tab.
   </p>
   {#if error}<p class="error">{error}</p>{/if}
 
@@ -112,6 +115,7 @@
       <div class="row">
         <label>Name <input bind:value={lang.name} placeholder="e.g. French" /></label>
         <label>Code <input bind:value={lang.code} placeholder="e.g. fr" size="6" /></label>
+        <label>Translate to <input bind:value={lang.translateTo} placeholder="e.g. tr" size="6" /></label>
         <label class="inline"><input type="checkbox" bind:checked={lang.rightToLeft} /> Right-to-left</label>
       </div>
 
