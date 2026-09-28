@@ -1,0 +1,140 @@
+import Dexie from 'dexie';
+
+// Term statuses follow Lute v3: 1-5 = learning stages, 99 = well known, 98 = ignored.
+// Status 0 means "unknown" and is never stored; an absent term row is unknown.
+export const STATUS = Object.freeze({
+  UNKNOWN: 0,
+  NEW: 1,
+  LEARNING_2: 2,
+  LEARNING_3: 3,
+  LEARNING_4: 4,
+  LEARNED: 5,
+  IGNORED: 98,
+  WELL_KNOWN: 99
+});
+
+export const db = new Dexie('bookling');
+
+db.version(1).stores({
+  languages: '++id, &name',
+  books: '++id, languageId, lastOpenedAt',
+  pages: '++id, [bookId+index], bookId',
+  terms: '++id, &[languageId+text], languageId, status',
+  settings: 'key'
+});
+
+/** Dictionary URL templates use `###` as the placeholder for the looked-up term (Lute convention). */
+export const DEFAULT_LANGUAGES = [
+  {
+    name: 'English',
+    code: 'en',
+    rightToLeft: false,
+    dictionaries: [
+      { name: 'Wiktionary', url: 'https://en.m.wiktionary.org/wiki/###', embed: true },
+      { name: 'Tureng', url: 'https://tureng.com/en/turkish-english/###', embed: false },
+      { name: 'Google Translate', url: 'https://translate.google.com/?sl=en&tl=tr&text=###', embed: false }
+    ]
+  },
+  {
+    name: 'German',
+    code: 'de',
+    rightToLeft: false,
+    dictionaries: [
+      { name: 'Wiktionary', url: 'https://de.m.wiktionary.org/wiki/###', embed: true },
+      { name: 'Tureng', url: 'https://tureng.com/en/german-turkish/###', embed: false }
+    ]
+  },
+  {
+    name: 'Spanish',
+    code: 'es',
+    rightToLeft: false,
+    dictionaries: [
+      { name: 'Wiktionary', url: 'https://es.m.wiktionary.org/wiki/###', embed: true },
+      { name: 'Tureng', url: 'https://tureng.com/en/spanish-turkish/###', embed: false }
+    ]
+  }
+];
+
+export async function ensureSeedData() {
+  if ((await db.languages.count()) === 0) {
+    await db.languages.bulkAdd(DEFAULT_LANGUAGES);
+  }
+}
+
+export function normalizeTerm(text, code) {
+  return text.trim().toLocaleLowerCase(code || undefined);
+}
+
+/** Returns a Map of normalized term text -> term row for the given language. */
+export async function loadTermMap(languageId) {
+  const rows = await db.terms.where('languageId').equals(languageId).toArray();
+  return new Map(rows.map((t) => [t.text, t]));
+}
+
+export async function saveTerm(languageId, text, fields) {
+  const now = Date.now();
+  const existing = await db.terms.where({ languageId, text }).first();
+  if (existing) {
+    await db.terms.update(existing.id, { ...fields, updatedAt: now });
+    return { ...existing, ...fields, updatedAt: now };
+  }
+  const row = {
+    languageId,
+    text,
+    status: STATUS.NEW,
+    translation: '',
+    romanization: '',
+    parent: '',
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+    ...fields
+  };
+  row.id = await db.terms.add(row);
+  return row;
+}
+
+/** Marks every given word that has no term row yet as well known. */
+export async function markUnknownAsKnown(languageId, words) {
+  const now = Date.now();
+  const unique = [...new Set(words)];
+  const existing = await db.terms
+    .where('[languageId+text]')
+    .anyOf(unique.map((w) => [languageId, w]))
+    .toArray();
+  const have = new Set(existing.map((t) => t.text));
+  const rows = unique
+    .filter((w) => !have.has(w))
+    .map((text) => ({
+      languageId,
+      text,
+      status: STATUS.WELL_KNOWN,
+      translation: '',
+      romanization: '',
+      parent: '',
+      tags: [],
+      createdAt: now,
+      updatedAt: now
+    }));
+  if (rows.length) await db.terms.bulkAdd(rows);
+  return rows.length;
+}
+
+export async function deleteBook(bookId) {
+  await db.transaction('rw', db.books, db.pages, async () => {
+    await db.pages.where('bookId').equals(bookId).delete();
+    await db.books.delete(bookId);
+  });
+}
+
+/** Asks the browser not to evict our IndexedDB data (important on iOS). */
+export async function requestPersistentStorage() {
+  try {
+    if (navigator.storage?.persist && !(await navigator.storage.persisted())) {
+      return await navigator.storage.persist();
+    }
+  } catch {
+    // Not supported; data stays best-effort.
+  }
+  return false;
+}
