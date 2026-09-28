@@ -18,6 +18,8 @@
 
   --reader-font: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
   --ui-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(20 20 10 / 0.04), 0 4px 14px rgb(20 20 10 / 0.06);
   color-scheme: light;
 }
 
@@ -38,6 +40,7 @@
     --st-3: #635423;
     --st-4: #545a22;
     --st-5: #29502a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 4px 14px rgb(0 0 0 / 0.28);
     color-scheme: dark;
   }
 }
@@ -73,12 +76,21 @@ button {
   background: var(--surface);
   border-radius: 8px;
   padding: 0.45rem 0.8rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+}
+
+button.primary:hover {
+  filter: brightness(1.06);
 }
 
 button.danger {
@@ -88,6 +100,15 @@ button.danger {
 button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input,
@@ -123,7 +144,8 @@ label.inline {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 1rem;
 }
 

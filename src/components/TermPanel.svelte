@@ -2,14 +2,15 @@
   import { STATUS } from '../lib/db.js';
   import { dictionaryUrl } from '../lib/dictionary.js';
   import { canSpeak, speak } from '../lib/speech.js';
+  import { translateText } from '../lib/translate.js';
 
   /**
    * @type {{
-   *   language: any, word: string, termKey: string, term: any,
+   *   language: any, word: string, term: any,
    *   onsave: (fields: object) => void, ondelete: () => void, onclose: () => void
    * }}
    */
-  let { language, word, termKey, term, onsave, ondelete, onclose } = $props();
+  let { language, word, term, onsave, ondelete, onclose } = $props();
 
   const STATUS_BUTTONS = [
     { value: 1, label: '1' },
@@ -26,12 +27,41 @@
   let parent = $state('');
   let dictIndex = $state(0);
 
+  // Direct machine translation: fetched automatically for every word tapped, and used to fill
+  // the translation field when the term is new. It never overwrites something already saved.
+  let suggestion = $state('');
+  let suggestLoading = $state(false);
+  let suggestError = $state('');
+
   $effect(() => {
     // Reset the form whenever another word is selected.
-    termKey;
-    translation = term?.translation ?? '';
+    const w = word;
+    const savedTranslation = term?.translation ?? '';
+    translation = savedTranslation;
     romanization = term?.romanization ?? '';
     parent = term?.parent ?? '';
+    dictIndex = 0;
+    suggestion = '';
+    suggestError = '';
+
+    const sourceCode = language?.code;
+    const targetCode = language?.translateTo;
+    if (!sourceCode || !targetCode || !w) return;
+
+    const controller = new AbortController();
+    suggestLoading = true;
+    translateText(w, sourceCode, targetCode, { signal: controller.signal })
+      .then((result) => {
+        suggestion = result;
+        if (!savedTranslation && !translation) translation = result;
+      })
+      .catch((err) => {
+        if (err?.name !== 'AbortError') suggestError = err.message || 'Çeviri alınamadı.';
+      })
+      .finally(() => {
+        suggestLoading = false;
+      });
+    return () => controller.abort();
   });
 
   const dictionaries = $derived(language?.dictionaries ?? []);
@@ -79,6 +109,15 @@
       Translation
       <textarea rows="2" bind:value={translation} placeholder="Meaning, notes…"></textarea>
     </label>
+    {#if suggestLoading}
+      <p class="suggest muted small">Çevriliyor…</p>
+    {:else if suggestion && suggestion.trim().toLocaleLowerCase() !== translation.trim().toLocaleLowerCase()}
+      <button type="button" class="suggest-chip" onclick={() => (translation = suggestion)}>
+        ✨ Öneri: <strong>{suggestion}</strong>
+      </button>
+    {:else if suggestError}
+      <p class="suggest muted small">{suggestError}</p>
+    {/if}
     <div class="row two">
       <label>
         Pronunciation
@@ -164,6 +203,17 @@
   textarea {
     width: 100%;
     resize: vertical;
+  }
+  .suggest-chip {
+    text-align: left;
+    width: 100%;
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    color: var(--text);
+    margin-top: -0.25rem;
+  }
+  .suggest {
+    margin: -0.25rem 0 0;
   }
   .two > label {
     flex: 1 1 8rem;

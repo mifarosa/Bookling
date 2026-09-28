@@ -1,12 +1,27 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
-  import { db, loadTermMap, markUnknownAsKnown, normalizeTerm, saveTerm, STATUS } from '../lib/db.js';
+  import {
+    db,
+    deleteNote,
+    loadTermMap,
+    markUnknownAsKnown,
+    normalizeTerm,
+    notesForBook,
+    saveNote,
+    saveTerm,
+    setResumeAnchor,
+    clearResumeAnchor,
+    STATUS
+  } from '../lib/db.js';
   import { tokenize } from '../lib/tokenize.js';
   import { navigate } from '../lib/router.svelte.js';
   import TermPanel from '../components/TermPanel.svelte';
+  import Sheet from '../components/Sheet.svelte';
 
   let { bookId } = $props();
+
+  const SANS_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
   let book = $state(null);
   let language = $state(null);
@@ -14,25 +29,42 @@
   let paragraphs = $state([]);
   let error = $state('');
   let fontSize = $state(1.2);
+  let fontFamily = $state('serif'); // 'serif' | 'sans'
+  let readingTheme = $state('light'); // 'light' | 'sepia' | 'dark'
   let selected = $state(null); // { word, key }
+  let focusedPara = $state(null);
+  let noteEditingPara = $state(null);
+  let noteDraft = $state('');
+  let showToc = $state(false);
+  let showNotes = $state(false);
+  let showAppearance = $state(false);
   const terms = new SvelteMap();
+  const notes = new SvelteMap(); // paragraphIndex -> note row, for the current page
+  let allNotes = $state([]);
 
   const code = $derived(language?.code || undefined);
 
   const blocks = $derived(
     paragraphs.map((p) => {
-      const heading = p.startsWith('# ');
+      if (p && typeof p === 'object' && p.image) return { kind: 'image', src: p.src, alt: p.alt };
+      const heading = typeof p === 'string' && p.startsWith('# ');
       const text = heading ? p.slice(2) : p;
       return {
-        heading,
+        kind: heading ? 'heading' : 'text',
         tokens: tokenize(text, code).map((t) => (t.isWord ? { ...t, key: normalizeTerm(t.text, code) } : t))
       };
     })
   );
 
-  const pageWords = $derived(blocks.flatMap((b) => b.tokens.filter((t) => t.isWord).map((t) => t.key)));
+  const pageWords = $derived(
+    blocks.filter((b) => b.kind !== 'image').flatMap((b) => b.tokens.filter((t) => t.isWord).map((t) => t.key))
+  );
   const unknownCount = $derived(new Set(pageWords.filter((k) => !terms.has(k))).size);
   const isLastPage = $derived(book ? pageIndex >= book.pageCount - 1 : true);
+  const chapters = $derived(book?.chapters?.length > 1 ? book.chapters : []);
+  const currentChapterTitle = $derived(
+    chapters.length ? [...chapters].reverse().find((c) => c.page <= pageIndex)?.title : ''
+  );
 
   onMount(async () => {
     try {
@@ -40,22 +72,42 @@
       if (!book) throw new Error('Book not found.');
       language = await db.languages.get(book.languageId);
       for (const [k, v] of await loadTermMap(book.languageId)) terms.set(k, v);
-      const fs = await db.settings.get('fontSize');
+      allNotes = await notesForBook(bookId);
+
+      const [fs, ff, rt] = await Promise.all([
+        db.settings.get('fontSize'),
+        db.settings.get('readerFont'),
+        db.settings.get('readingTheme')
+      ]);
       if (fs) fontSize = fs.value;
-      await goTo(book.currentPage ?? 0);
+      if (ff) fontFamily = ff.value;
+      if (rt) readingTheme = rt.value;
+
+      const anchor = book.resumeAnchor;
+      await goTo(book.currentPage ?? 0, { paragraph: anchor?.page === book.currentPage ? anchor.paragraph : undefined });
     } catch (e) {
       error = e.message || String(e);
     }
   });
 
-  async function goTo(index) {
+  async function goTo(index, { paragraph } = {}) {
     const i = Math.max(0, Math.min(index, book.pageCount - 1));
     const page = await db.pages.where({ bookId, index: i }).first();
     paragraphs = page?.paragraphs ?? [];
     pageIndex = i;
     selected = null;
-    window.scrollTo(0, 0);
+    focusedPara = null;
+    noteEditingPara = null;
+    notes.clear();
+    for (const n of allNotes) if (n.pageIndex === i) notes.set(n.paragraphIndex, n);
     await db.books.update(bookId, { currentPage: i, lastOpenedAt: Date.now() });
+
+    await tick();
+    if (paragraph != null) {
+      document.getElementById('p' + paragraph)?.scrollIntoView({ block: 'start' });
+    } else {
+      window.scrollTo(0, 0);
+    }
   }
 
   async function markRestKnown() {
@@ -68,7 +120,8 @@
     else await goTo(pageIndex + 1);
   }
 
-  function select(token) {
+  function select(token, e) {
+    e?.stopPropagation();
     selected = { word: token.text, key: token.key };
   }
 
@@ -88,26 +141,105 @@
     await db.settings.put({ key: 'fontSize', value: fontSize });
   }
 
+  async function setFontFamily(value) {
+    fontFamily = value;
+    await db.settings.put({ key: 'readerFont', value });
+  }
+
+  async function setTheme(value) {
+    readingTheme = value;
+    await db.settings.put({ key: 'readingTheme', value });
+  }
+
   function statusOf(key) {
     return terms.get(key)?.status ?? STATUS.UNKNOWN;
+  }
+
+  function toggleFocus(bi) {
+    focusedPara = focusedPara === bi ? null : bi;
+    noteEditingPara = null;
+  }
+
+  async function toggleBookmark(bi, e) {
+    e.stopPropagation();
+    const isCurrent = book.resumeAnchor?.page === pageIndex && book.resumeAnchor?.paragraph === bi;
+    if (isCurrent) {
+      await clearResumeAnchor(bookId);
+      book.resumeAnchor = null;
+    } else {
+      await setResumeAnchor(bookId, pageIndex, bi);
+      book.resumeAnchor = { page: pageIndex, paragraph: bi };
+    }
+  }
+
+  function excerptOf(bi) {
+    const b = blocks[bi];
+    if (!b || b.kind === 'image') return '[image]';
+    return b.tokens
+      .map((t) => t.text)
+      .join('')
+      .slice(0, 140);
+  }
+
+  function openNote(bi, e) {
+    e?.stopPropagation();
+    noteEditingPara = bi;
+    noteDraft = notes.get(bi)?.text ?? '';
+  }
+
+  async function saveNoteDraft(bi) {
+    const text = noteDraft.trim();
+    if (!text) {
+      await removeNote(bi);
+      return;
+    }
+    const row = await saveNote(bookId, pageIndex, bi, excerptOf(bi), text);
+    notes.set(bi, row);
+    allNotes = [...allNotes.filter((n) => !(n.pageIndex === pageIndex && n.paragraphIndex === bi)), row];
+    noteEditingPara = null;
+  }
+
+  async function removeNote(bi) {
+    const row = notes.get(bi);
+    if (row) {
+      await deleteNote(row.id);
+      notes.delete(bi);
+      allNotes = allNotes.filter((n) => n.id !== row.id);
+    }
+    noteEditingPara = null;
+  }
+
+  async function jumpToNote(note) {
+    showNotes = false;
+    await goTo(note.pageIndex, { paragraph: note.paragraphIndex });
+  }
+
+  function jumpToChapter(chapter) {
+    showToc = false;
+    goTo(chapter.page);
   }
 
   const KEY_STATUS = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, w: STATUS.WELL_KNOWN, i: STATUS.IGNORED };
 
   function onKey(e) {
     if (e.target.closest?.('input, textarea, select')) return;
+    if (selected) {
+      if (e.key === 'Escape') selected = null;
+      else if (KEY_STATUS[e.key.toLowerCase()]) {
+        const t = terms.get(selected.key);
+        save({
+          status: KEY_STATUS[e.key.toLowerCase()],
+          translation: t?.translation ?? '',
+          romanization: t?.romanization ?? '',
+          parent: t?.parent ?? ''
+        });
+      }
+      return;
+    }
+    if (showToc || showNotes || showAppearance) return; // Sheet handles its own Escape
     if (e.key === 'ArrowRight' && !isLastPage) goTo(pageIndex + 1);
     else if (e.key === 'ArrowLeft' && pageIndex > 0) goTo(pageIndex - 1);
-    else if (e.key === 'Escape') selected = null;
-    else if (selected && KEY_STATUS[e.key.toLowerCase()]) {
-      const t = terms.get(selected.key);
-      save({
-        status: KEY_STATUS[e.key.toLowerCase()],
-        translation: t?.translation ?? '',
-        romanization: t?.romanization ?? '',
-        parent: t?.parent ?? ''
-      });
-    }
+    else if (e.key === 'Escape') focusedPara = null;
   }
 </script>
 
@@ -116,34 +248,87 @@
 {#if error}
   <p class="page error">{error} <a href="#/">Back to library</a></p>
 {:else if book}
-  <div class="reader" class:with-panel={selected}>
+  <div class="reader" data-theme={readingTheme} class:with-panel={selected}>
     <div class="main">
       <header>
         <a href="#/" aria-label="Back to library">←</a>
-        <span class="title">{book.title}</span>
-        <button onclick={() => setFont(-0.1)} aria-label="Smaller text">A−</button>
-        <button onclick={() => setFont(0.1)} aria-label="Larger text">A+</button>
+        <div class="titles">
+          <span class="title">{book.title}</span>
+          {#if currentChapterTitle}<span class="chapter muted">{currentChapterTitle}</span>{/if}
+        </div>
+        {#if chapters.length}
+          <button class="icon" onclick={() => (showToc = true)} aria-label="Table of contents" title="İçindekiler"
+            >☰</button
+          >
+        {/if}
+        <button class="icon" onclick={() => (showNotes = true)} aria-label="Notes" title="Notlarım">
+          📝{#if allNotes.length}<sup>{allNotes.length}</sup>{/if}
+        </button>
+        <button class="icon" onclick={() => (showAppearance = true)} aria-label="Appearance" title="Görünüm"
+          >Aa</button
+        >
       </header>
 
       <article
-        style="font-size: {fontSize}rem"
+        style="font-size: {fontSize}rem; font-family: {fontFamily === 'sans' ? SANS_STACK : 'var(--reader-font)'}"
         dir={language?.rightToLeft ? 'rtl' : 'auto'}
         lang={language?.code || undefined}
       >
-        {#each blocks as block}
-          <svelte:element this={block.heading ? 'h2' : 'p'}>
-            {#each block.tokens as t}
-              {#if t.isWord}<span
-                  class="w"
-                  class:sel={selected?.key === t.key}
-                  data-s={statusOf(t.key)}
-                  role="button"
-                  tabindex="-1"
-                  onclick={() => select(t)}
-                  onkeydown={(e) => e.key === 'Enter' && select(t)}>{t.text}</span
-                >{:else}{t.text}{/if}
-            {/each}
-          </svelte:element>
+        {#each blocks as block, bi}
+          {@const bookmarked = book.resumeAnchor?.page === pageIndex && book.resumeAnchor?.paragraph === bi}
+          {@const hasNote = notes.has(bi)}
+          <div
+            id={'p' + bi}
+            class="para"
+            class:bookmarked
+            class:has-note={hasNote}
+            class:focused={focusedPara === bi}
+            role="button"
+            tabindex="-1"
+            onclick={() => toggleFocus(bi)}
+            onkeydown={(e) => e.key === 'Enter' && toggleFocus(bi)}
+          >
+            {#if block.kind === 'image'}
+              <figure class="img-block">
+                <img src={block.src} alt={block.alt} loading="lazy" />
+              </figure>
+            {:else}
+              <svelte:element this={block.kind === 'heading' ? 'h2' : 'p'}>
+                {#each block.tokens as t}
+                  {#if t.isWord}<span
+                      class="w"
+                      class:sel={selected?.key === t.key}
+                      data-s={statusOf(t.key)}
+                      role="button"
+                      tabindex="-1"
+                      onclick={(e) => select(t, e)}
+                      onkeydown={(e) => e.key === 'Enter' && select(t, e)}>{t.text}</span
+                    >{:else}{t.text}{/if}
+                {/each}
+              </svelte:element>
+            {/if}
+
+            {#if focusedPara === bi}
+              <div class="para-actions" onclick={(e) => e.stopPropagation()} role="toolbar" aria-label="Paragraph actions">
+                {#if noteEditingPara === bi}
+                  <textarea bind:value={noteDraft} rows="2" placeholder="Bu bölümle ilgili notun…" autofocus
+                  ></textarea>
+                  <div class="row">
+                    <button class="primary" onclick={() => saveNoteDraft(bi)}>Kaydet</button>
+                    {#if notes.has(bi)}<button class="danger" onclick={() => removeNote(bi)}>Notu sil</button>{/if}
+                    <button onclick={() => (noteEditingPara = null)}>Vazgeç</button>
+                  </div>
+                {:else}
+                  <button class:on={bookmarked} onclick={(e) => toggleBookmark(bi, e)}>
+                    📍 {bookmarked ? 'Kaldığın yer' : 'Kaldığın yeri işaretle'}
+                  </button>
+                  <button class:on={hasNote} onclick={(e) => openNote(bi, e)}>
+                    📝 {hasNote ? 'Notu düzenle' : 'Not ekle'}
+                  </button>
+                {/if}
+              </div>
+            {/if}
+          </div>
         {/each}
       </article>
 
@@ -153,7 +338,7 @@
           {pageIndex + 1} / {book.pageCount}
           {#if unknownCount}· {unknownCount} new{/if}
         </span>
-        <button class="primary" onclick={markRestKnown} title="Mark all unhighlighted-blue words as known">
+        <button class="primary" onclick={markRestKnown} title="Mark all unhighlighted words as known">
           {isLastPage ? '✓ Finish' : '✓ Next'}
         </button>
         {#if !isLastPage}
@@ -167,7 +352,6 @@
         <TermPanel
           {language}
           word={selected.word}
-          termKey={selected.key}
           term={terms.get(selected.key)}
           onsave={save}
           ondelete={forget}
@@ -176,6 +360,81 @@
       </div>
     {/if}
   </div>
+
+  {#if showToc}
+    <Sheet title="İçindekiler" onclose={() => (showToc = false)}>
+      {#if chapters.length}
+        <ul class="list">
+          {#each chapters as c}
+            <li>
+              <button class="list-row" class:active={c.page === pageIndex} onclick={() => jumpToChapter(c)}>
+                <span>{c.title}</span>
+                <span class="muted">s. {c.page + 1}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted">İçindekiler bulunamadı.</p>
+      {/if}
+    </Sheet>
+  {/if}
+
+  {#if showNotes}
+    <Sheet title="Notlarım" onclose={() => (showNotes = false)}>
+      {#if allNotes.length}
+        <ul class="list">
+          {#each [...allNotes].sort((a, b) => a.pageIndex - b.pageIndex) as n (n.id)}
+            <li>
+              <button class="list-row note-row" onclick={() => jumpToNote(n)}>
+                <span class="excerpt muted">{n.excerpt}</span>
+                <span class="note-text">{n.text}</span>
+                <span class="muted small">s. {n.pageIndex + 1}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted">Henüz not eklemedin. Bir paragrafa dokunup "Not ekle"yi seç.</p>
+      {/if}
+    </Sheet>
+  {/if}
+
+  {#if showAppearance}
+    <Sheet title="Görünüm" onclose={() => (showAppearance = false)}>
+      <div class="appearance">
+        <div class="group">
+          <span class="muted small">Yazı boyutu</span>
+          <div class="row">
+            <button onclick={() => setFont(-0.1)} aria-label="Smaller text">A−</button>
+            <span class="muted">{fontSize.toFixed(1)}×</span>
+            <button onclick={() => setFont(0.1)} aria-label="Larger text">A+</button>
+          </div>
+        </div>
+        <div class="group">
+          <span class="muted small">Yazı tipi</span>
+          <div class="row">
+            <button class:on={fontFamily === 'serif'} onclick={() => setFontFamily('serif')}>Serif</button>
+            <button class:on={fontFamily === 'sans'} onclick={() => setFontFamily('sans')}>Sans</button>
+          </div>
+        </div>
+        <div class="group">
+          <span class="muted small">Renk teması</span>
+          <div class="row themes">
+            <button class="theme-swatch light" class:on={readingTheme === 'light'} onclick={() => setTheme('light')}
+              >Açık</button
+            >
+            <button class="theme-swatch sepia" class:on={readingTheme === 'sepia'} onclick={() => setTheme('sepia')}
+              >Sepya</button
+            >
+            <button class="theme-swatch dark" class:on={readingTheme === 'dark'} onclick={() => setTheme('dark')}
+              >Koyu</button
+            >
+          </div>
+        </div>
+      </div>
+    </Sheet>
+  {/if}
 {/if}
 
 <style>
@@ -184,6 +443,26 @@
     grid-template-columns: 1fr;
     min-height: 100vh;
     min-height: 100dvh;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .reader[data-theme='sepia'] {
+    --bg: #f4ecd8;
+    --surface: #faf3e3;
+    --text: #433422;
+    --muted: #8a7a5c;
+    --border: #e3d5b6;
+    --accent: #93502a;
+    --accent-text: #ffffff;
+  }
+  .reader[data-theme='dark'] {
+    --bg: #16181d;
+    --surface: #1f232a;
+    --text: #e6e3dd;
+    --muted: #9aa1ad;
+    --border: #333842;
+    --accent: #7aa2d6;
+    --accent-text: #0f1115;
   }
   .main {
     display: flex;
@@ -198,8 +477,8 @@
     z-index: 5;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
     padding-top: max(0.5rem, env(safe-area-inset-top));
     background: var(--bg);
     border-bottom: 1px solid var(--border);
@@ -207,39 +486,124 @@
   header a {
     text-decoration: none;
     font-size: 1.3rem;
+    color: var(--text);
+    padding: 0 0.2rem;
+  }
+  .titles {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
   }
   .title {
-    flex: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 600;
   }
+  .chapter {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.75rem;
+  }
+  .icon {
+    padding: 0.4rem 0.5rem;
+    font-size: 1rem;
+    position: relative;
+  }
+  .icon sup {
+    color: var(--accent);
+    font-weight: 700;
+  }
   article {
     flex: 1;
     padding: 1rem 1.25rem 2rem;
-    font-family: var(--reader-font);
     line-height: 1.75;
     overflow-wrap: break-word;
   }
   article h2 {
     font-size: 1.3em;
     line-height: 1.4;
+    margin: 1.6em 0 0.8em;
+  }
+  .para {
+    position: relative;
+    border-radius: 8px;
+    margin: 0 -0.5rem;
+    padding: 0 0.5rem;
+    scroll-margin-top: 4.2rem;
+  }
+  .para p {
+    margin: 0;
+    text-indent: 1.4em;
+  }
+  h2 + .para p,
+  .para:first-child p {
+    text-indent: 0;
+  }
+  .para.focused {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .para.bookmarked::before {
+    content: '';
+    position: absolute;
+    left: -0.55rem;
+    top: 0.35em;
+    bottom: 0.35em;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+  .para.has-note::after {
+    content: '📝';
+    position: absolute;
+    right: -0.1rem;
+    top: 0.1em;
+    font-size: 0.7em;
+    opacity: 0.75;
+  }
+  .img-block {
+    margin: 1.2em 0;
+    text-align: center;
+  }
+  .img-block img {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 8px;
+  }
+  .para-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.5rem 0 0.9rem;
+    font-family: var(--ui-font);
+    font-size: 0.85rem;
+  }
+  .para-actions textarea {
+    width: 100%;
+    resize: vertical;
+  }
+  .para-actions button.on {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .w {
     cursor: pointer;
-    border-radius: 3px;
-    padding: 0 1px;
     -webkit-tap-highlight-color: transparent;
   }
-  .w[data-s='0'] { background: var(--st-0); }
-  .w[data-s='1'] { background: var(--st-1); }
-  .w[data-s='2'] { background: var(--st-2); }
-  .w[data-s='3'] { background: var(--st-3); }
-  .w[data-s='4'] { background: var(--st-4); }
-  .w[data-s='5'] { border-bottom: 2px solid var(--st-5); }
+  .w[data-s='0'] {
+    text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent) 1.5px;
+    text-underline-offset: 3px;
+  }
+  .w[data-s='1'] { text-decoration: underline solid var(--st-1) 2px; text-underline-offset: 3px; }
+  .w[data-s='2'] { text-decoration: underline solid var(--st-2) 2px; text-underline-offset: 3px; }
+  .w[data-s='3'] { text-decoration: underline solid var(--st-3) 2px; text-underline-offset: 3px; }
+  .w[data-s='4'] { text-decoration: underline solid var(--st-4) 2px; text-underline-offset: 3px; }
   .w.sel {
-    outline: 2px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    border-radius: 3px;
   }
   footer {
     position: sticky;
@@ -252,6 +616,7 @@
     padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
     background: var(--bg);
     border-top: 1px solid var(--border);
+    font-family: var(--ui-font);
   }
   footer .muted {
     flex: 1;
@@ -290,5 +655,57 @@
       border-left: 1px solid var(--border);
       box-shadow: none;
     }
+  }
+
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+  .list-row {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding: 0.6rem 0.4rem;
+    border-radius: 8px;
+  }
+  .list-row:hover {
+    background: var(--bg);
+  }
+  .list-row.active {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .note-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+  .excerpt {
+    font-size: 0.8rem;
+  }
+  .note-text {
+    font-size: 0.95rem;
+  }
+
+  .appearance {
+    display: grid;
+    gap: 1.1rem;
+  }
+  .group {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .themes button {
+    flex: 1;
+  }
+  .theme-swatch.on {
+    outline: 2px solid var(--accent);
   }
 </style>
