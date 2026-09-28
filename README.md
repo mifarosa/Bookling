@@ -1,5 +1,7 @@
 # Bookling
 
+**https://bookling.mifarosa.com**
+
 Offline-first PWA for learning languages by reading ebooks -- Lute/LWT compatible, no server required.
 
 Import an EPUB or TXT file (or paste an article), then read it with every word colour-coded by how well
@@ -29,19 +31,24 @@ status, `Esc` closes the word panel.
 
 ```sh
 npm install
-npm run dev      # http://localhost:5173/bookling/
+npm run dev      # http://localhost:5173/
 npm test         # unit tests (Vitest)
 npm run build    # production build in dist/
 npm run preview  # serve the production build (service worker enabled)
 ```
 
-The app is served under `/bookling/` by default to match GitHub Pages. Set `BASE_PATH=/` to build for
-a domain root.
+The app is built for a domain root. Set `BASE_PATH=/some/path/` to host it under a sub-path.
 
 ## Deployment (GitHub Pages)
 
 `.github/workflows/deploy.yml` runs the tests and builds on every pull request, and deploys `main` to
-GitHub Pages. Enable it once in **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+GitHub Pages at `bookling.mifarosa.com`. One-time setup:
+
+1. DNS: a `CNAME` record `bookling` → `mifarosa.github.io`.
+2. **Settings → Pages**: Source **GitHub Actions**, Custom domain `bookling.mifarosa.com`, then
+   **Enforce HTTPS** once the certificate is issued.
+
+`public/CNAME` records the domain in the deployed site as well.
 
 Routing uses the URL hash (`#/read/1`), so deep links work on GitHub Pages without a 404 fallback.
 

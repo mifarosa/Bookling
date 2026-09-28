@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// GitHub Pages serves the app from /<repo>/; override with BASE_PATH for other hosts.
-const base = process.env.BASE_PATH ?? '/bookling/';
+// Served from the root of https://bookling.mifarosa.com; set BASE_PATH (e.g. /bookling/) for a sub-path host.
+const base = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
   base,
