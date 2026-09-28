@@ -1,0 +1,152 @@
+:root {
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --text: #22262e;
+  --muted: #6b7280;
+  --border: #e5e0d8;
+  --accent: #3d5a80;
+  --accent-text: #ffffff;
+  --danger: #b42318;
+
+  /* Term status colors, modeled on Lute's defaults. */
+  --st-0: #cfe8fc;
+  --st-1: #f8c9bd;
+  --st-2: #f9d8b8;
+  --st-3: #f7e6a8;
+  --st-4: #eef0a6;
+  --st-5: #d6f2d0;
+
+  --reader-font: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+  --ui-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --surface: #1f232a;
+    --text: #e6e3dd;
+    --muted: #9aa1ad;
+    --border: #333842;
+    --accent: #7aa2d6;
+    --accent-text: #0f1115;
+    --danger: #f97066;
+
+    --st-0: #1f4466;
+    --st-1: #6b2e22;
+    --st-2: #6b4524;
+    --st-3: #635423;
+    --st-4: #545a22;
+    --st-5: #29502a;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui-font);
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  color: var(--accent);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+button.danger {
+  color: var(--danger);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  max-width: 100%;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0.2rem 0 1rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+}
