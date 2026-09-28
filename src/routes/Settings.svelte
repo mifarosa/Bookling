@@ -20,10 +20,7 @@
   });
 
   async function load() {
-    languages = (await db.languages.orderBy('name').toArray()).map((l) => ({
-      ...l,
-      dictionaries: l.dictionaries.map((d) => ({ ...d }))
-    }));
+    languages = await db.languages.orderBy('name').toArray();
   }
 
   async function saveLanguage(lang) {
@@ -32,7 +29,7 @@
       const row = $state.snapshot(lang);
       row.name = row.name.trim();
       row.code = row.code.trim();
-      row.dictionaries = row.dictionaries.filter((d) => d.url.trim());
+      row.translateTo = row.translateTo.trim();
       if (!row.name) throw new Error('Language name is required.');
       if (row.code && !isValidLocale(row.code)) throw new Error(`"${row.code}" is not a valid language code.`);
       if (row.id) await db.languages.put(row);
@@ -68,13 +65,7 @@
   }
 
   function addLanguage() {
-    languages.push({
-      name: '',
-      code: '',
-      translateTo: 'tr',
-      rightToLeft: false,
-      dictionaries: [{ name: 'Wiktionary', url: 'https://en.m.wiktionary.org/wiki/###', embed: true }]
-    });
+    languages.push({ name: '', code: '', translateTo: 'tr', rightToLeft: false });
   }
 
   async function askPersist() {
@@ -101,12 +92,10 @@
     </p>
   </section>
 
-  <h2>Languages & dictionaries</h2>
+  <h2>Languages</h2>
   <p class="muted small">
-    "Translate to" is the language tapping a word translates into automatically (a free machine
-    translation, shown as a suggestion you can accept or edit). In dictionary URLs, <code>###</code> is
-    replaced with the selected word. "Embed" shows the dictionary inside the reader; many sites (e.g.
-    Tureng) refuse to be embedded, so open those in a new tab.
+    "Translate to" is the language tapping a word translates into automatically — a free machine
+    translation shown right in the reader, with a couple of alternatives to choose from.
   </p>
   {#if error}<p class="error">{error}</p>{/if}
 
@@ -119,19 +108,7 @@
         <label class="inline"><input type="checkbox" bind:checked={lang.rightToLeft} /> Right-to-left</label>
       </div>
 
-      {#each lang.dictionaries as d, di}
-        <div class="row dict">
-          <input class="dname" bind:value={d.name} placeholder="Name" aria-label="Dictionary name" />
-          <input class="durl" bind:value={d.url} placeholder="https://…/###" aria-label="Dictionary URL" />
-          <label class="inline"><input type="checkbox" bind:checked={d.embed} /> Embed</label>
-          <button class="danger" onclick={() => lang.dictionaries.splice(di, 1)} aria-label="Remove dictionary"
-            >✕</button
-          >
-        </div>
-      {/each}
-
       <div class="row">
-        <button onclick={() => lang.dictionaries.push({ name: '', url: '', embed: false })}>+ Dictionary</button>
         <span class="spacer"></span>
         <button class="danger" onclick={() => removeLanguage(lang)}>Delete</button>
         <button class="primary" onclick={() => saveLanguage(lang)}>
@@ -154,13 +131,6 @@
   .storage h2,
   .storage p {
     margin: 0;
-  }
-  .dict input.dname {
-    flex: 0 1 9rem;
-    min-width: 6rem;
-  }
-  .dict input.durl {
-    flex: 1 1 14rem;
   }
   .spacer {
     flex: 1;

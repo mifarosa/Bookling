@@ -94,12 +94,7 @@ export async function importLuteCsv(text) {
 
       let lang = byName.get(langName.toLowerCase());
       if (!lang) {
-        lang = {
-          name: langName,
-          code: '',
-          rightToLeft: false,
-          dictionaries: [{ name: 'Wiktionary', url: 'https://en.m.wiktionary.org/wiki/###', embed: true }]
-        };
+        lang = { name: langName, code: '', translateTo: 'tr', rightToLeft: false };
         lang.id = await db.languages.add(lang);
         byName.set(langName.toLowerCase(), lang);
         result.createdLanguages.push(langName);

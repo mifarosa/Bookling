@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TranslateError, translateText } from '../src/lib/translate.js';
+import { TranslateError, translateAlternatives, translateText } from '../src/lib/translate.js';
 
 function mockFetchOnce(body, ok = true, status = 200) {
   global.fetch = vi.fn().mockResolvedValue({
@@ -55,5 +55,52 @@ describe('translateText', () => {
     global.fetch = vi.fn();
     expect(await translateText('   ', 'en', 'tr')).toBe('');
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('translateAlternatives', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('returns other matches, excluding the primary result and duplicates, best match first', async () => {
+    mockFetchOnce({
+      responseData: { translatedText: 'kedi' },
+      matches: [
+        { translation: 'kedi', match: 1 }, // same as primary, dropped
+        { translation: 'pisi', match: 0.7 },
+        { translation: 'Pisi', match: 0.7 }, // duplicate of "pisi", case-insensitive
+        { translation: 'kedicik', match: 0.9 }
+      ]
+    });
+    const alts = await translateAlternatives('alt-word-1', 'en', 'tr');
+    expect(alts).toEqual(['kedicik', 'pisi']);
+  });
+
+  it('caps the list and returns an empty array when there are no matches', async () => {
+    mockFetchOnce({ responseData: { translatedText: 'x' } });
+    expect(await translateAlternatives('alt-word-2', 'en', 'tr')).toEqual([]);
+  });
+
+  it('never throws: resolves to an empty array when the lookup fails', async () => {
+    mockFetchOnce({}, false, 500);
+    await expect(translateAlternatives('alt-word-3', 'en', 'tr')).resolves.toEqual([]);
+  });
+
+  it('shares one network request with a concurrent translateText call for the same word', async () => {
+    mockFetchOnce({ responseData: { translatedText: 'ev' }, matches: [{ translation: 'konut', match: 0.5 }] });
+    const [text, alts] = await Promise.all([
+      translateText('alt-word-4', 'en', 'tr'),
+      translateAlternatives('alt-word-4', 'en', 'tr')
+    ]);
+    expect(text).toBe('ev');
+    expect(alts).toEqual(['konut']);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });
