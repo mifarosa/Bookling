@@ -1,8 +1,7 @@
 <script>
   import { STATUS } from '../lib/db.js';
-  import { dictionaryUrl } from '../lib/dictionary.js';
   import { canSpeak, speak } from '../lib/speech.js';
-  import { translateText } from '../lib/translate.js';
+  import { translateAlternatives, translateText } from '../lib/translate.js';
 
   /**
    * @type {{
@@ -25,11 +24,13 @@
   let translation = $state('');
   let romanization = $state('');
   let parent = $state('');
-  let dictIndex = $state(0);
 
-  // Direct machine translation: fetched automatically for every word tapped, and used to fill
-  // the translation field when the term is new. It never overwrites something already saved.
+  // Direct machine translation, shown entirely in this panel (no dictionary site to jump to):
+  // fetched automatically for every word tapped, used to fill the translation field when the term
+  // is new, and offered as alternatives from the same lookup otherwise. Never overwrites a saved
+  // translation that differs from the fresh result.
   let suggestion = $state('');
+  let alternatives = $state([]);
   let suggestLoading = $state(false);
   let suggestError = $state('');
 
@@ -40,8 +41,8 @@
     translation = savedTranslation;
     romanization = term?.romanization ?? '';
     parent = term?.parent ?? '';
-    dictIndex = 0;
     suggestion = '';
+    alternatives = [];
     suggestError = '';
 
     const sourceCode = language?.code;
@@ -61,11 +62,12 @@
       .finally(() => {
         suggestLoading = false;
       });
+    translateAlternatives(w, sourceCode, targetCode, { signal: controller.signal }).then((result) => {
+      alternatives = result;
+    });
     return () => controller.abort();
   });
 
-  const dictionaries = $derived(language?.dictionaries ?? []);
-  const activeDict = $derived(dictionaries[dictIndex] ?? null);
   const status = $derived(term?.status ?? STATUS.UNKNOWN);
 
   function setStatus(value) {
@@ -77,9 +79,9 @@
     onsave({ status: status || STATUS.NEW, translation, romanization, parent });
   }
 
-  function openDict(d, i) {
-    if (d.embed) dictIndex = i;
-    else window.open(dictionaryUrl(d.url, word), '_blank', 'noopener');
+  function useTranslation(value) {
+    translation = value;
+    saveDetails();
   }
 </script>
 
@@ -104,11 +106,21 @@
       onchange={saveDetails}
     ></textarea>
     {#if suggestion && suggestion.trim().toLocaleLowerCase() !== translation.trim().toLocaleLowerCase()}
-      <button type="button" class="suggest-chip" onclick={() => { translation = suggestion; saveDetails(); }}>
+      <button type="button" class="suggest-chip" onclick={() => useTranslation(suggestion)}>
         ✨ Öneriyi kullan: <strong>{suggestion}</strong>
       </button>
     {:else if suggestError}
       <p class="suggest muted small">{suggestError}</p>
+    {/if}
+    {#if alternatives.length}
+      <div class="alternatives">
+        <span class="muted small">Diğer seçenekler:</span>
+        <div class="row">
+          {#each alternatives as alt}
+            <button type="button" class="alt-chip" onclick={() => useTranslation(alt)}>{alt}</button>
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 
@@ -140,27 +152,6 @@
       {#if term}<button type="button" class="danger" onclick={ondelete}>Forget</button>{/if}
     </div>
   </form>
-
-  {#if dictionaries.length}
-    <div class="dicts row">
-      {#each dictionaries as d, i}
-        <button class:current={d.embed && i === dictIndex} onclick={() => openDict(d, i)}>
-          {d.name}{d.embed ? '' : ' ↗'}
-        </button>
-      {/each}
-    </div>
-    {#if activeDict?.embed}
-      <iframe
-        title="{activeDict.name}: {word}"
-        src={dictionaryUrl(activeDict.url, word)}
-        referrerpolicy="no-referrer"
-        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-      ></iframe>
-      <a class="muted small" href={dictionaryUrl(activeDict.url, word)} target="_blank" rel="noopener"
-        >Open {activeDict.name} in a new tab ↗</a
-      >
-    {/if}
-  {/if}
 </aside>
 
 <style>
@@ -231,23 +222,19 @@
   .suggest {
     margin: 0;
   }
+  .alternatives {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .alt-chip {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+  }
   .two > label {
     flex: 1 1 8rem;
   }
   .two input {
     width: 100%;
-  }
-  .dicts button {
-    font-size: 0.85rem;
-    padding: 0.3rem 0.6rem;
-  }
-  iframe {
-    width: 100%;
-    flex: 1;
-    min-height: 260px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: #fff;
   }
   .small {
     font-size: 0.8rem;

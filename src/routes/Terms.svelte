@@ -53,7 +53,7 @@
       const r = await importLuteCsv(await file.text());
       message = `Imported: ${r.added} new, ${r.updated} updated, ${r.skipped} skipped.`;
       if (r.createdLanguages.length) {
-        message += ` New languages created: ${r.createdLanguages.join(', ')} (set their code and dictionaries in Settings).`;
+        message += ` New languages created: ${r.createdLanguages.join(', ')} (set their code in Settings).`;
       }
     } catch (err) {
       error = err.message || String(err);

@@ -28,42 +28,11 @@ db.version(2).stores({
   notes: '++id, bookId, [bookId+pageIndex], updatedAt'
 });
 
-/**
- * Dictionary URL templates use `###` as the placeholder for the looked-up term (Lute convention).
- * `translateTo` is the target language for the built-in machine translation lookup.
- */
+/** `translateTo` is the target language for the built-in machine translation lookup. */
 export const DEFAULT_LANGUAGES = [
-  {
-    name: 'English',
-    code: 'en',
-    translateTo: 'tr',
-    rightToLeft: false,
-    dictionaries: [
-      { name: 'Wiktionary', url: 'https://en.m.wiktionary.org/wiki/###', embed: true },
-      { name: 'Tureng', url: 'https://tureng.com/en/turkish-english/###', embed: false },
-      { name: 'Google Translate', url: 'https://translate.google.com/?sl=en&tl=tr&text=###', embed: false }
-    ]
-  },
-  {
-    name: 'German',
-    code: 'de',
-    translateTo: 'tr',
-    rightToLeft: false,
-    dictionaries: [
-      { name: 'Wiktionary', url: 'https://de.m.wiktionary.org/wiki/###', embed: true },
-      { name: 'Tureng', url: 'https://tureng.com/en/german-turkish/###', embed: false }
-    ]
-  },
-  {
-    name: 'Spanish',
-    code: 'es',
-    translateTo: 'tr',
-    rightToLeft: false,
-    dictionaries: [
-      { name: 'Wiktionary', url: 'https://es.m.wiktionary.org/wiki/###', embed: true },
-      { name: 'Tureng', url: 'https://tureng.com/en/spanish-turkish/###', embed: false }
-    ]
-  }
+  { name: 'English', code: 'en', translateTo: 'tr', rightToLeft: false },
+  { name: 'German', code: 'de', translateTo: 'tr', rightToLeft: false },
+  { name: 'Spanish', code: 'es', translateTo: 'tr', rightToLeft: false }
 ];
 
 export async function ensureSeedData() {
