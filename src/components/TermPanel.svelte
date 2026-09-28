@@ -92,6 +92,26 @@
     <button class="close" onclick={onclose} aria-label="Close">✕</button>
   </div>
 
+  <div class="translate-block">
+    {#if suggestLoading}
+      <p class="suggest muted small">Çevriliyor…</p>
+    {/if}
+    <textarea
+      class="translation-input"
+      rows="1"
+      bind:value={translation}
+      placeholder="Çeviri / anlam…"
+      onchange={saveDetails}
+    ></textarea>
+    {#if suggestion && suggestion.trim().toLocaleLowerCase() !== translation.trim().toLocaleLowerCase()}
+      <button type="button" class="suggest-chip" onclick={() => { translation = suggestion; saveDetails(); }}>
+        ✨ Öneriyi kullan: <strong>{suggestion}</strong>
+      </button>
+    {:else if suggestError}
+      <p class="suggest muted small">{suggestError}</p>
+    {/if}
+  </div>
+
   <div class="statuses" role="group" aria-label="Status">
     {#each STATUS_BUTTONS as b}
       <button
@@ -105,19 +125,6 @@
   </div>
 
   <form onsubmit={saveDetails}>
-    <label>
-      Translation
-      <textarea rows="2" bind:value={translation} placeholder="Meaning, notes…"></textarea>
-    </label>
-    {#if suggestLoading}
-      <p class="suggest muted small">Çevriliyor…</p>
-    {:else if suggestion && suggestion.trim().toLocaleLowerCase() !== translation.trim().toLocaleLowerCase()}
-      <button type="button" class="suggest-chip" onclick={() => (translation = suggestion)}>
-        ✨ Öneri: <strong>{suggestion}</strong>
-      </button>
-    {:else if suggestError}
-      <p class="suggest muted small">{suggestError}</p>
-    {/if}
     <div class="row two">
       <label>
         Pronunciation
@@ -204,16 +211,25 @@
     width: 100%;
     resize: vertical;
   }
+  .translate-block {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .translation-input {
+    font-size: 1.15rem;
+    font-family: var(--reader-font);
+    resize: vertical;
+    min-height: 2.6rem;
+  }
   .suggest-chip {
     text-align: left;
     width: 100%;
     background: color-mix(in srgb, var(--accent) 10%, var(--surface));
     border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
     color: var(--text);
-    margin-top: -0.25rem;
   }
   .suggest {
-    margin: -0.25rem 0 0;
+    margin: 0;
   }
   .two > label {
     flex: 1 1 8rem;

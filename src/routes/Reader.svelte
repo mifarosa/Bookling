@@ -339,7 +339,7 @@
           {#if unknownCount}· {unknownCount} new{/if}
         </span>
         <button class="primary" onclick={markRestKnown} title="Mark all unhighlighted words as known">
-          {isLastPage ? '✓ Finish' : '✓ Next'}
+          {isLastPage ? 'Finish' : 'Next'}
         </button>
         {#if !isLastPage}
           <button onclick={() => goTo(pageIndex + 1)} title="Next page without marking words">→</button>
@@ -589,18 +589,11 @@
     border-color: var(--accent);
     color: var(--accent);
   }
+  /* Plain reading text: no status markings on the words themselves — tap one to see/set its status. */
   .w {
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
-  .w[data-s='0'] {
-    text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent) 1.5px;
-    text-underline-offset: 3px;
-  }
-  .w[data-s='1'] { text-decoration: underline solid var(--st-1) 2px; text-underline-offset: 3px; }
-  .w[data-s='2'] { text-decoration: underline solid var(--st-2) 2px; text-underline-offset: 3px; }
-  .w[data-s='3'] { text-decoration: underline solid var(--st-3) 2px; text-underline-offset: 3px; }
-  .w[data-s='4'] { text-decoration: underline solid var(--st-4) 2px; text-underline-offset: 3px; }
   .w.sel {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     border-radius: 3px;
