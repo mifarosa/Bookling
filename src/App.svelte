@@ -39,6 +39,9 @@
         <a href={item.href} class:active={section === item.id}>{item.label}</a>
       {/each}
     </nav>
+    <a class="coffee" href="https://www.buymeacoffee.com/mifarosa" target="_blank" rel="noopener">
+      ☕ Buy me a coffee
+    </a>
   </header>
 {/if}
 
@@ -99,5 +102,23 @@
   nav a.active {
     color: var(--text);
     background: var(--bg);
+  }
+  .coffee {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 0.35rem 0.7rem;
+    border-radius: 8px;
+    color: #3d2b00;
+    background: #ffdd57;
+    border: 1px solid #e8c547;
+    transition: filter 0.15s ease;
+  }
+  .coffee:hover {
+    filter: brightness(1.05);
   }
 </style>
