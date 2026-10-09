@@ -17,6 +17,7 @@
   import { tokenize } from '../lib/tokenize.js';
   import { navigate } from '../lib/router.svelte.js';
   import TermPanel from '../components/TermPanel.svelte';
+  import SelectionPanel from '../components/SelectionPanel.svelte';
   import Sheet from '../components/Sheet.svelte';
 
   let { bookId } = $props();
@@ -32,6 +33,10 @@
   let fontFamily = $state('serif'); // 'serif' | 'sans'
   let readingTheme = $state('light'); // 'light' | 'sepia' | 'dark'
   let selected = $state(null); // { word, key }
+  let phraseSelection = $state(''); // the text shown in SelectionPanel, once the user taps "Çevir"
+  let selFab = $state(null); // { text, x, y } — the floating "Çevir" button for an active text selection
+  let articleEl;
+  let selectionTimer;
   let focusedPara = $state(null);
   let noteEditingPara = $state(null);
   let noteDraft = $state('');
@@ -96,6 +101,8 @@
     paragraphs = page?.paragraphs ?? [];
     pageIndex = i;
     selected = null;
+    phraseSelection = '';
+    selFab = null;
     focusedPara = null;
     noteEditingPara = null;
     notes.clear();
@@ -120,9 +127,54 @@
     else await goTo(pageIndex + 1);
   }
 
+  /** True while the user has an actual (non-collapsed) text selection — the tail end of a drag-select,
+   *  as opposed to a plain tap, which collapses any prior selection before its click fires. */
+  function hasActiveSelection() {
+    const sel = window.getSelection();
+    return !!(sel && !sel.isCollapsed && sel.toString().trim().length > 0);
+  }
+
   function select(token, e) {
     e?.stopPropagation();
+    if (hasActiveSelection()) return; // this click is the tail of a sentence drag-select, not a tap
+    phraseSelection = '';
     selected = { word: token.text, key: token.key };
+  }
+
+  /** Debounced selectionchange handler: shows a floating "Çevir" button near a sentence/phrase
+   *  selected inside the reading text, without reacting to every intermediate drag position. */
+  function onSelectionChange() {
+    clearTimeout(selectionTimer);
+    selectionTimer = setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !articleEl) {
+        selFab = null;
+        return;
+      }
+      const text = sel.toString().trim();
+      if (!text || !articleEl.contains(sel.anchorNode) || !articleEl.contains(sel.focusNode)) {
+        selFab = null;
+        return;
+      }
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) {
+        selFab = null;
+        return;
+      }
+      selFab = {
+        text,
+        x: Math.min(Math.max(rect.left + rect.width / 2, 70), window.innerWidth - 70),
+        y: Math.max(rect.top - 44, 8)
+      };
+    }, 150);
+  }
+
+  function openSelectionTranslate() {
+    if (!selFab) return;
+    phraseSelection = selFab.text;
+    selected = null;
+    selFab = null;
+    window.getSelection()?.removeAllRanges();
   }
 
   async function save(fields) {
@@ -156,6 +208,7 @@
   }
 
   function toggleFocus(bi) {
+    if (hasActiveSelection()) return; // don't open paragraph actions at the tail of a drag-select
     focusedPara = focusedPara === bi ? null : bi;
     noteEditingPara = null;
   }
@@ -236,6 +289,10 @@
       }
       return;
     }
+    if (phraseSelection) {
+      if (e.key === 'Escape') phraseSelection = '';
+      return;
+    }
     if (showToc || showNotes || showAppearance) return; // Sheet handles its own Escape
     if (e.key === 'ArrowRight' && !isLastPage) goTo(pageIndex + 1);
     else if (e.key === 'ArrowLeft' && pageIndex > 0) goTo(pageIndex - 1);
@@ -243,12 +300,13 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} onscroll={() => (selFab = null)} />
+<svelte:document onselectionchange={onSelectionChange} />
 
 {#if error}
   <p class="page error">{error} <a href="#/">Back to library</a></p>
 {:else if book}
-  <div class="reader" data-theme={readingTheme} class:with-panel={selected}>
+  <div class="reader" data-theme={readingTheme} class:with-panel={selected || phraseSelection}>
     <div class="main">
       <header>
         <a href="#/" aria-label="Back to library">←</a>
@@ -270,6 +328,7 @@
       </header>
 
       <article
+        bind:this={articleEl}
         style="font-size: {fontSize}rem; font-family: {fontFamily === 'sans' ? SANS_STACK : 'var(--reader-font)'}"
         dir={language?.rightToLeft ? 'rtl' : 'auto'}
         lang={language?.code || undefined}
@@ -358,8 +417,22 @@
           onclose={() => (selected = null)}
         />
       </div>
+    {:else if phraseSelection}
+      <div class="side">
+        <SelectionPanel {language} text={phraseSelection} onclose={() => (phraseSelection = '')} />
+      </div>
     {/if}
   </div>
+
+  {#if selFab}
+    <button
+      class="translate-fab"
+      style="left: {selFab.x}px; top: {selFab.y}px;"
+      onclick={openSelectionTranslate}
+    >
+      🌐 Çevir
+    </button>
+  {/if}
 
   {#if showToc}
     <Sheet title="İçindekiler" onclose={() => (showToc = false)}>
@@ -597,6 +670,22 @@
   .w.sel {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     border-radius: 3px;
+  }
+  .translate-fab {
+    position: fixed;
+    z-index: 25;
+    transform: translate(-50%, -100%);
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--ui-font);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+    white-space: nowrap;
+    cursor: pointer;
   }
   footer {
     position: sticky;
