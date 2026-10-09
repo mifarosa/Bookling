@@ -42,6 +42,32 @@ describe('translateText', () => {
     await expect(translateText('xyz123', 'en', 'tr')).rejects.toThrow(TranslateError);
   });
 
+  it('falls back to a clean match when the "best" result is garbled, instead of returning it', async () => {
+    // Real-world case: MyMemory's "best" pick for a common stopword can be HTML-entity-escaped junk
+    // from tab-separated source data (decodes to control characters) — reject it and use a clean
+    // lower-scored match instead of surfacing garbage.
+    mockFetchOnce({
+      responseData: {
+        translatedText: 'staj&#09;anketinizi Staj&#09;anketinizi &#231;&#305;kan&#09;&#09;&#246;nemli',
+        match: 1
+      },
+      matches: [{ translation: 'bilgi', match: 0.4 }]
+    });
+    expect(await translateText('the', 'en', 'tr')).toBe('bilgi');
+  });
+
+  it('decodes HTML entities in an otherwise clean result', async () => {
+    mockFetchOnce({ responseData: { translatedText: 'k&#246;pek' } });
+    expect(await translateText('dog-entities', 'en', 'tr')).toBe('köpek');
+  });
+
+  it('rejects an implausibly long result for a short query', async () => {
+    mockFetchOnce({
+      responseData: { translatedText: 'bu tamamen alakasiz ve cok uzun bir cumle parcasidir gercekten' }
+    });
+    await expect(translateText('a', 'en', 'tr')).rejects.toThrow(TranslateError);
+  });
+
   it('throws a TranslateError on a non-ok HTTP response', async () => {
     mockFetchOnce({}, false, 500);
     await expect(translateText('dog', 'en', 'tr')).rejects.toThrow(TranslateError);
