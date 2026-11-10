@@ -17,8 +17,8 @@
     { value: 3, label: '3' },
     { value: 4, label: '4' },
     { value: 5, label: '5' },
-    { value: STATUS.WELL_KNOWN, label: 'Known', title: 'Well known (W)' },
-    { value: STATUS.IGNORED, label: 'Ignore', title: 'Ignore (I)' }
+    { value: STATUS.WELL_KNOWN, label: 'Biliyorum', title: 'İyi biliyorum (W)' },
+    { value: STATUS.IGNORED, label: 'Yok say', title: 'Yok say — isim, sayı vb. (I)' }
   ];
 
   let translation = $state('');
@@ -85,13 +85,13 @@
   }
 </script>
 
-<aside class="panel" aria-label="Term details">
+<aside class="panel" aria-label="Kelime ayrıntıları">
   <div class="head">
     <strong class="word" dir={language?.rightToLeft ? 'rtl' : 'auto'}>{word}</strong>
     {#if canSpeak()}
-      <button onclick={() => speak(word, language?.code)} aria-label="Pronounce">🔊</button>
+      <button onclick={() => speak(word, language?.code)} aria-label="Telaffuzu dinle" title="Telaffuzu dinle">🔊</button>
     {/if}
-    <button class="close" onclick={onclose} aria-label="Close">✕</button>
+    <button class="close" onclick={onclose} aria-label="Kapat">✕</button>
   </div>
 
   <div class="translate-block">
@@ -124,13 +124,16 @@
     {/if}
   </div>
 
-  <div class="statuses" role="group" aria-label="Status">
+  <p class="hint stage-hint">
+    Ne kadar biliyorsun? <span>1 = yeni</span> → <span>5 = neredeyse öğrendim</span>
+  </p>
+  <div class="statuses" role="group" aria-label="Öğrenme durumu">
     {#each STATUS_BUTTONS as b}
       <button
         class="st"
         data-s={b.value}
         class:current={status === b.value}
-        title={b.title ?? `Learning stage ${b.value}`}
+        title={b.title ?? `Öğrenme aşaması ${b.value} (${b.value} tuşu)`}
         onclick={() => setStatus(b.value)}>{b.label}</button
       >
     {/each}
@@ -139,17 +142,17 @@
   <form onsubmit={saveDetails}>
     <div class="row two">
       <label>
-        Pronunciation
+        Okunuş
         <input bind:value={romanization} />
       </label>
       <label>
-        Parent (root form)
+        Kök hali
         <input bind:value={parent} />
       </label>
     </div>
     <div class="row">
-      <button class="primary" type="submit">Save</button>
-      {#if term}<button type="button" class="danger" onclick={ondelete}>Forget</button>{/if}
+      <button class="primary" type="submit">Kaydet</button>
+      {#if term}<button type="button" class="danger" onclick={ondelete}>Unut</button>{/if}
     </div>
   </form>
 </aside>
@@ -180,9 +183,17 @@
     flex-wrap: wrap;
     gap: 0.35rem;
   }
+  .stage-hint {
+    margin-bottom: -0.35rem;
+  }
   .st {
-    min-width: 2.4rem;
-    padding: 0.4rem 0.5rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0.4rem 0.6rem;
+    color: var(--text);
+  }
+  .st:nth-child(n + 6) {
+    flex: 1 1 auto;
   }
   .st[data-s='1'] { background: var(--st-1); }
   .st[data-s='2'] { background: var(--st-2); }

@@ -26,9 +26,14 @@
 </script>
 
 <div class="page">
-  <h1>Stats</h1>
+  <h1>İstatistik</h1>
   {#if $stats && $stats.length === 0}
-    <p class="muted">Nothing yet. Read something and mark some words!</p>
+    <div class="card empty-state">
+      <span class="emoji" aria-hidden="true">📊</span>
+      <h2>Henüz veri yok</h2>
+      <p class="muted">Bir şeyler oku ve kelimeleri işaretle; ilerlemen burada görünecek.</p>
+      <a class="button primary" href="#/">Kitaplığa git</a>
+    </div>
   {/if}
   <div class="grid">
     {#each $stats ?? [] as s (s.language.id)}
@@ -36,20 +41,22 @@
       <section class="card">
         <h2>{s.language.name}</h2>
         <div class="big">{s.known.toLocaleString()}</div>
-        <div class="muted">known words</div>
+        <div class="muted">bilinen kelime</div>
         <dl>
-          <dt>Learning</dt><dd>{s.learning}</dd>
-          <dt>Known this week</dt><dd>+{s.knownThisWeek}</dd>
-          <dt>Books</dt><dd>{s.books}</dd>
+          <dt>Öğreniliyor</dt><dd>{s.learning}</dd>
+          <dt>Bu hafta bilinen</dt><dd>+{s.knownThisWeek}</dd>
+          <dt>Kitap</dt><dd>{s.books}</dd>
         </dl>
-        <div class="bars" aria-label="Terms per learning stage">
+        <div class="bars" aria-label="Öğrenme aşamasına göre kelime sayısı">
           {#each s.byStatus as n, i}
             <div class="bar">
               <span data-s={i + 1} style="height: {(n / max) * 100}%"></span>
-              <small>{i + 1}</small>
+              <small>{n}</small>
+              <small class="stage">{i + 1}</small>
             </div>
           {/each}
         </div>
+        <p class="hint legend">Altındaki sayılar öğrenme aşamasıdır: 1 = yeni, 5 = neredeyse öğrenildi.</p>
       </section>
     {/each}
   </div>
@@ -110,5 +117,18 @@
   .bar span[data-s='5'] { background: var(--st-5); }
   small {
     color: var(--muted);
+    font-size: 0.75rem;
+  }
+  .bars {
+    height: 90px;
+  }
+  .bar span {
+    margin-top: 0.1rem;
+  }
+  .stage {
+    font-weight: 600;
+  }
+  .legend {
+    margin: 0.5rem 0 0;
   }
 </style>

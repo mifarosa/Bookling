@@ -64,6 +64,7 @@
   const pageWords = $derived(
     blocks.filter((b) => b.kind !== 'image').flatMap((b) => b.tokens.filter((t) => t.isWord).map((t) => t.key))
   );
+  const progressPct = $derived(book ? Math.round(((pageIndex + 1) / book.pageCount) * 100) : 0);
   const unknownCount = $derived(new Set(pageWords.filter((k) => !terms.has(k))).size);
   const isLastPage = $derived(book ? pageIndex >= book.pageCount - 1 : true);
   const chapters = $derived(book?.chapters?.length > 1 ? book.chapters : []);
@@ -74,7 +75,7 @@
   onMount(async () => {
     try {
       book = await db.books.get(bookId);
-      if (!book) throw new Error('Book not found.');
+      if (!book) throw new Error('Kitap bulunamadı.');
       language = await db.languages.get(book.languageId);
       for (const [k, v] of await loadTermMap(book.languageId)) terms.set(k, v);
       allNotes = await notesForBook(bookId);
@@ -227,7 +228,7 @@
 
   function excerptOf(bi) {
     const b = blocks[bi];
-    if (!b || b.kind === 'image') return '[image]';
+    if (!b || b.kind === 'image') return '[görsel]';
     return b.tokens
       .map((t) => t.text)
       .join('')
@@ -304,27 +305,30 @@
 <svelte:document onselectionchange={onSelectionChange} />
 
 {#if error}
-  <p class="page error">{error} <a href="#/">Back to library</a></p>
+  <p class="page error">{error} <a href="#/">Kitaplığa dön</a></p>
 {:else if book}
   <div class="reader" data-theme={readingTheme} class:with-panel={selected || phraseSelection}>
     <div class="main">
       <header>
-        <a href="#/" aria-label="Back to library">←</a>
+        <a class="back" href="#/" aria-label="Kitaplığa dön" title="Kitaplığa dön">←</a>
         <div class="titles">
           <span class="title">{book.title}</span>
           {#if currentChapterTitle}<span class="chapter muted">{currentChapterTitle}</span>{/if}
         </div>
         {#if chapters.length}
-          <button class="icon" onclick={() => (showToc = true)} aria-label="Table of contents" title="İçindekiler"
+          <button class="icon" onclick={() => (showToc = true)} aria-label="İçindekiler" title="İçindekiler"
             >☰</button
           >
         {/if}
-        <button class="icon" onclick={() => (showNotes = true)} aria-label="Notes" title="Notlarım">
+        <button class="icon" onclick={() => (showNotes = true)} aria-label="Notlarım" title="Notlarım">
           📝{#if allNotes.length}<sup>{allNotes.length}</sup>{/if}
         </button>
-        <button class="icon" onclick={() => (showAppearance = true)} aria-label="Appearance" title="Görünüm"
+        <button class="icon" onclick={() => (showAppearance = true)} aria-label="Görünüm ayarları" title="Görünüm"
           >Aa</button
         >
+        <div class="progress" role="progressbar" aria-label="Okuma ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPct}>
+          <span style="width: {progressPct}%"></span>
+        </div>
       </header>
 
       <article
@@ -368,7 +372,7 @@
             {/if}
 
             {#if focusedPara === bi}
-              <div class="para-actions" onclick={(e) => e.stopPropagation()} role="toolbar" aria-label="Paragraph actions">
+              <div class="para-actions" onclick={(e) => e.stopPropagation()} role="toolbar" aria-label="Paragraf işlemleri">
                 {#if noteEditingPara === bi}
                   <textarea bind:value={noteDraft} rows="2" placeholder="Bu bölümle ilgili notun…" autofocus
                   ></textarea>
@@ -392,17 +396,27 @@
       </article>
 
       <footer>
-        <button onclick={() => goTo(pageIndex - 1)} disabled={pageIndex === 0}>← Prev</button>
-        <span class="muted">
-          {pageIndex + 1} / {book.pageCount}
-          {#if unknownCount}· {unknownCount} new{/if}
-        </span>
-        <button class="primary" onclick={markRestKnown} title="Mark all unhighlighted words as known">
-          {isLastPage ? 'Finish' : 'Next'}
-        </button>
-        {#if !isLastPage}
-          <button onclick={() => goTo(pageIndex + 1)} title="Next page without marking words">→</button>
-        {/if}
+        <div class="counter muted" aria-live="polite">
+          Sayfa {pageIndex + 1} / {book.pageCount}
+          {#if unknownCount}· <strong class="new">{unknownCount} yeni kelime</strong>{/if}
+        </div>
+        <div class="nav">
+          <button class="step" onclick={() => goTo(pageIndex - 1)} disabled={pageIndex === 0} aria-label="Önceki sayfa" title="Önceki sayfa (←)"
+            >←</button
+          >
+          {#if !isLastPage}
+            <button class="step" onclick={() => goTo(pageIndex + 1)} aria-label="Sonraki sayfa (kelimeleri işaretlemeden)" title="Kelimeleri işaretlemeden sonraki sayfa (→)"
+              >→</button
+            >
+          {/if}
+          <button
+            class="primary go"
+            onclick={markRestKnown}
+            title="Bu sayfada işaretlemediğin tüm kelimeler “biliyorum” olarak kaydedilir"
+          >
+            {isLastPage ? '✓ Bitir' : '✓ Bildim, devam et'}
+          </button>
+        </div>
       </footer>
     </div>
 
@@ -479,9 +493,9 @@
         <div class="group">
           <span class="muted small">Yazı boyutu</span>
           <div class="row">
-            <button onclick={() => setFont(-0.1)} aria-label="Smaller text">A−</button>
+            <button onclick={() => setFont(-0.1)} aria-label="Yazıyı küçült">A−</button>
             <span class="muted">{fontSize.toFixed(1)}×</span>
-            <button onclick={() => setFont(0.1)} aria-label="Larger text">A+</button>
+            <button onclick={() => setFont(0.1)} aria-label="Yazıyı büyüt">A+</button>
           </div>
         </div>
         <div class="group">
@@ -583,8 +597,38 @@
   }
   .icon {
     padding: 0.4rem 0.5rem;
-    font-size: 1rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    font-size: 1.05rem;
     position: relative;
+    border-color: transparent;
+    background: transparent;
+  }
+  header .back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    border-radius: 10px;
+  }
+  header .back:hover {
+    background: color-mix(in srgb, var(--text) 8%, transparent);
+  }
+  .progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 3px;
+    background: transparent;
+    pointer-events: none;
+  }
+  .progress span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease;
   }
   .icon sup {
     color: var(--accent);
@@ -690,20 +734,35 @@
   footer {
     position: sticky;
     bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.6rem 1rem;
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
     padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
     background: var(--bg);
     border-top: 1px solid var(--border);
     font-family: var(--ui-font);
   }
-  footer .muted {
-    flex: 1;
+  .counter {
     text-align: center;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+  }
+  .counter .new {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .nav {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .nav .step {
+    min-width: 3rem;
+    min-height: 2.9rem;
+    font-size: 1.1rem;
+  }
+  .nav .go {
+    flex: 1;
+    min-height: 2.9rem;
+    font-weight: 600;
   }
   .side {
     position: fixed;

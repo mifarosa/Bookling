@@ -42,13 +42,13 @@
   });
 </script>
 
-<aside class="panel" aria-label="Selection translation">
+<aside class="panel" aria-label="Seçili metnin çevirisi">
   <div class="head">
     <p class="phrase" dir={language?.rightToLeft ? 'rtl' : 'auto'}>{text}</p>
     {#if canSpeak()}
-      <button onclick={() => speak(text, language?.code)} aria-label="Pronounce">🔊</button>
+      <button onclick={() => speak(text, language?.code)} aria-label="Telaffuzu dinle">🔊</button>
     {/if}
-    <button class="close" onclick={onclose} aria-label="Close">✕</button>
+    <button class="close" onclick={onclose} aria-label="Kapat">✕</button>
   </div>
 
   <div class="translate-block">

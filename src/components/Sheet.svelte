@@ -9,11 +9,11 @@
 
 <svelte:window onkeydown={onKey} />
 
-<button class="backdrop" onclick={onclose} aria-label="Close"></button>
+<button class="backdrop" onclick={onclose} aria-label="Kapat"></button>
 <div class="sheet" role="dialog" aria-label={title}>
   <div class="head">
     <strong>{title}</strong>
-    <button class="close" onclick={onclose} aria-label="Close">✕</button>
+    <button class="close" onclick={onclose} aria-label="Kapat">✕</button>
   </div>
   <div class="body">
     {@render children?.()}
