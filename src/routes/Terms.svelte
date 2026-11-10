@@ -51,9 +51,9 @@
     message = error = '';
     try {
       const r = await importLuteCsv(await file.text());
-      message = `Imported: ${r.added} new, ${r.updated} updated, ${r.skipped} skipped.`;
+      message = `İçe aktarıldı: ${r.added} yeni, ${r.updated} güncellendi, ${r.skipped} atlandı.`;
       if (r.createdLanguages.length) {
-        message += ` New languages created: ${r.createdLanguages.join(', ')} (set their code in Settings).`;
+        message += ` Yeni diller oluşturuldu: ${r.createdLanguages.join(', ')} (kodlarını Ayarlar'dan gir).`;
       }
     } catch (err) {
       error = err.message || String(err);
@@ -61,60 +61,85 @@
   }
 
   async function remove(t) {
-    await db.terms.delete(t.id);
+    if (confirm(`"${t.text}" kelimesi silinsin mi?`)) await db.terms.delete(t.id);
   }
+
+  const STATUS_FILTERS = [
+    { id: 'learning', label: 'Öğreniliyor' },
+    { id: 'known', label: 'Biliyorum' },
+    { id: 'ignored', label: 'Yok say' },
+    { id: 'all', label: 'Hepsi' }
+  ];
+
+  const STATUS_LABEL = { 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' };
+  const statusLabel = (s) => (s === STATUS.WELL_KNOWN ? 'Biliyorum' : s === STATUS.IGNORED ? 'Yok say' : (STATUS_LABEL[s] ?? statusToLute(s)));
 </script>
 
 <div class="page">
-  <h1>Terms</h1>
-
-  <div class="card row">
-    <button onclick={doExport}>⬇ Export Lute CSV</button>
-    <label class="button">
-      ⬆ Import Lute CSV
-      <input type="file" accept=".csv,text/csv" onchange={doImport} hidden />
-    </label>
-    <span class="muted small">Compatible with Lute v3 term import/export.</span>
-  </div>
-  {#if message}<p>{message}</p>{/if}
-  {#if error}<p class="error">{error}</p>{/if}
+  <h1>Kelimeler</h1>
 
   <div class="row filters">
-    <select bind:value={languageId} aria-label="Language">
-      <option value="">All languages</option>
+    <input type="search" bind:value={search} placeholder="Kelime veya çeviri ara…" aria-label="Ara" />
+    <select bind:value={languageId} aria-label="Dil">
+      <option value="">Tüm diller</option>
       {#each $languages ?? [] as l (l.id)}
         <option value={String(l.id)}>{l.name}</option>
       {/each}
     </select>
-    <select bind:value={statusFilter} aria-label="Status">
-      <option value="learning">Learning (1–5)</option>
-      <option value="known">Known</option>
-      <option value="ignored">Ignored</option>
-      <option value="all">All</option>
-    </select>
-    <input type="search" bind:value={search} placeholder="Search…" />
   </div>
 
-  <p class="muted small">{filtered.length} terms</p>
-  <table>
-    <thead>
-      <tr><th>Term</th><th>Translation</th><th>Status</th><th>Language</th><th></th></tr>
-    </thead>
-    <tbody>
+  <div class="row chips" role="group" aria-label="Duruma göre filtrele">
+    {#each STATUS_FILTERS as f}
+      <button class="chip" class:on={statusFilter === f.id} onclick={() => (statusFilter = f.id)}>{f.label}</button>
+    {/each}
+    <span class="muted small count">{filtered.length} kelime</span>
+  </div>
+
+  {#if message}<p role="status">{message}</p>{/if}
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+
+  {#if filtered.length === 0}
+    <div class="card empty-state">
+      <span class="emoji" aria-hidden="true">🔤</span>
+      <h2>{($terms ?? []).length === 0 ? 'Henüz kelime yok' : 'Eşleşen kelime yok'}</h2>
+      <p class="muted">
+        {#if ($terms ?? []).length === 0}
+          Okurken bir kelimeye dokun; durumunu işaretlediğinde burada listelenir.
+        {:else}
+          Filtreyi ya da aramayı değiştirmeyi dene.
+        {/if}
+      </p>
+    </div>
+  {:else}
+    <ul class="list">
       {#each filtered.slice(0, limit) as t (t.id)}
-        <tr>
-          <td>{t.text}</td>
-          <td>{t.translation}</td>
-          <td><span class="badge" data-s={t.status}>{statusToLute(t.status)}</span></td>
-          <td class="muted">{langName(t.languageId)}</td>
-          <td><button class="danger small" onclick={() => remove(t)} aria-label="Delete term">✕</button></td>
-        </tr>
+        <li class="term">
+          <span class="badge" data-s={t.status} title="Durum">{statusLabel(t.status)}</span>
+          <div class="text">
+            <strong>{t.text}</strong>
+            <span class="muted">{t.translation || '—'}</span>
+          </div>
+          {#if languageId === ''}<span class="muted small lang">{langName(t.languageId)}</span>{/if}
+          <button class="ghost danger" onclick={() => remove(t)} aria-label="“{t.text}” kelimesini sil">✕</button>
+        </li>
       {/each}
-    </tbody>
-  </table>
-  {#if filtered.length > limit}
-    <button onclick={() => (limit += 200)}>Show more</button>
+    </ul>
+    {#if filtered.length > limit}
+      <button onclick={() => (limit += 200)}>Daha fazla göster</button>
+    {/if}
   {/if}
+
+  <details class="card backup">
+    <summary>Yedekle / içe aktar</summary>
+    <p class="hint">Lute v3 ile uyumlu CSV dosyası. Kelimelerini yedeklemek ya da başka cihaza taşımak için kullan.</p>
+    <div class="row">
+      <button onclick={doExport}>⬇ CSV olarak dışa aktar</button>
+      <label class="button">
+        ⬆ CSV içe aktar
+        <input type="file" accept=".csv,text/csv" onchange={doImport} hidden />
+      </label>
+    </div>
+  </details>
 </div>
 
 <style>
@@ -124,40 +149,61 @@
   .filters input {
     flex: 1 1 10rem;
   }
-  .button {
-    display: inline-block;
-    flex-direction: row;
-    color: var(--text);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    border-radius: 8px;
-    padding: 0.45rem 0.8rem;
-    cursor: pointer;
-    font-size: 1rem;
-  }
   .small {
     font-size: 0.85rem;
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    display: block;
-    overflow-x: auto;
+  .chips {
+    margin-bottom: 0.75rem;
   }
-  th,
-  td {
-    text-align: left;
-    padding: 0.4rem 0.5rem;
+  .count {
+    margin-left: auto;
+  }
+  .list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .term {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--border);
-    vertical-align: top;
   }
-  th {
-    font-size: 0.85rem;
-    color: var(--muted);
+  .term:last-child {
+    border-bottom: none;
+  }
+  .text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .text span {
+    overflow-wrap: anywhere;
+  }
+  .lang {
+    white-space: nowrap;
+  }
+  .backup {
+    margin-top: 1.5rem;
+  }
+  .backup summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .backup .hint {
+    margin: 0.6rem 0;
   }
   .badge {
     display: inline-block;
-    min-width: 1.6rem;
+    min-width: 2.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
     text-align: center;
     border-radius: 4px;
     padding: 0 0.3rem;
@@ -168,4 +214,6 @@
   .badge[data-s='3'] { background: var(--st-3); }
   .badge[data-s='4'] { background: var(--st-4); }
   .badge[data-s='5'] { background: var(--st-5); }
+  .badge[data-s='98'],
+  .badge[data-s='99'] { background: var(--bg); }
 </style>

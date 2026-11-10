@@ -30,8 +30,8 @@
       row.name = row.name.trim();
       row.code = row.code.trim();
       row.translateTo = row.translateTo.trim();
-      if (!row.name) throw new Error('Language name is required.');
-      if (row.code && !isValidLocale(row.code)) throw new Error(`"${row.code}" is not a valid language code.`);
+      if (!row.name) throw new Error('Dil adı gerekli.');
+      if (row.code && !isValidLocale(row.code)) throw new Error(`"${row.code}" geçerli bir dil kodu değil.`);
       if (row.id) await db.languages.put(row);
       else lang.id = await db.languages.add(row);
       saved = row.name;
@@ -54,10 +54,11 @@
       languages = languages.filter((l) => l !== lang);
       return;
     }
+    if (!confirm(`"${lang.name}" dili silinsin mi?`)) return;
     const books = await db.books.where('languageId').equals(lang.id).count();
     const terms = await db.terms.where('languageId').equals(lang.id).count();
     if (books || terms) {
-      error = `${lang.name} still has ${books} books and ${terms} terms; delete them first.`;
+      error = `${lang.name} dilinde hâlâ ${books} kitap ve ${terms} kelime var; önce onları sil.`;
       return;
     }
     await db.languages.delete(lang.id);
@@ -74,51 +75,53 @@
 </script>
 
 <div class="page">
-  <h1>Settings</h1>
+  <h1>Ayarlar</h1>
 
   <section class="card storage">
-    <h2>Storage</h2>
-    <p class="muted">
-      Everything lives on this device only. Export your terms from the Terms page to back them up.
+    <h2>Depolama</h2>
+    <p class="hint">
+      Tüm verin yalnızca bu cihazda saklanır. Yedeklemek için Kelimeler sayfasından kelimelerini dışa aktarabilirsin.
     </p>
     <p>
-      Used: {usage || 'unknown'} ·
-      {#if persisted}
-        Persistent storage granted ✓
-      {:else}
-        Storage may be cleared by the browser.
-        <button onclick={askPersist}>Keep my data</button>
-      {/if}
+      Kullanılan: <strong>{usage || 'bilinmiyor'}</strong>
     </p>
+    {#if persisted}
+      <p class="ok">✓ Kalıcı depolama açık; tarayıcı verini kendiliğinden silmez.</p>
+    {:else}
+      <div class="row">
+        <span class="hint">Tarayıcı, yer daraldığında verini silebilir.</span>
+        <button onclick={askPersist}>Verimi koru</button>
+      </div>
+    {/if}
   </section>
 
-  <h2>Languages</h2>
-  <p class="muted small">
-    "Translate to" is the language tapping a word translates into automatically — a free machine
-    translation shown right in the reader, with a couple of alternatives to choose from.
+  <h2>Diller</h2>
+  <p class="hint intro">
+    “Çeviri dili”, bir kelimeye dokunduğunda otomatik çevirinin hangi dile yapılacağını belirler
+    (ör. Türkçe için <code>tr</code>). Dil kodu ise okunan kitabın dilidir (ör. <code>fr</code>, <code>de</code>, <code>es</code>).
   </p>
-  {#if error}<p class="error">{error}</p>{/if}
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
 
   {#each languages as lang, li (lang.id ?? 'new-' + li)}
     <section class="card lang">
-      <div class="row">
-        <label>Name <input bind:value={lang.name} placeholder="e.g. French" /></label>
-        <label>Code <input bind:value={lang.code} placeholder="e.g. fr" size="6" /></label>
-        <label>Translate to <input bind:value={lang.translateTo} placeholder="e.g. tr" size="6" /></label>
-        <label class="inline"><input type="checkbox" bind:checked={lang.rightToLeft} /> Right-to-left</label>
+      <div class="fields">
+        <label>Dil adı <input bind:value={lang.name} placeholder="ör. Fransızca" /></label>
+        <label>Dil kodu <input bind:value={lang.code} placeholder="ör. fr" /></label>
+        <label>Çeviri dili <input bind:value={lang.translateTo} placeholder="ör. tr" /></label>
       </div>
+      <label class="inline"><input type="checkbox" bind:checked={lang.rightToLeft} /> Sağdan sola yazılır (Arapça, İbranice…)</label>
 
       <div class="row">
+        <button class="danger" onclick={() => removeLanguage(lang)}>Sil</button>
         <span class="spacer"></span>
-        <button class="danger" onclick={() => removeLanguage(lang)}>Delete</button>
         <button class="primary" onclick={() => saveLanguage(lang)}>
-          {saved && saved === lang.name.trim() ? 'Saved ✓' : 'Save'}
+          {saved && saved === lang.name.trim() ? 'Kaydedildi ✓' : 'Kaydet'}
         </button>
       </div>
     </section>
   {/each}
 
-  <button onclick={addLanguage}>+ Add language</button>
+  <button onclick={addLanguage}>＋ Dil ekle</button>
 </div>
 
 <style>
@@ -135,7 +138,29 @@
   .spacer {
     flex: 1;
   }
-  .small {
-    font-size: 0.85rem;
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 0.75rem;
+  }
+  .fields input {
+    width: 100%;
+  }
+  .intro {
+    margin-bottom: 0.75rem;
+  }
+  .ok {
+    color: #1a7f37;
+  }
+  @media (prefers-color-scheme: dark) {
+    .ok {
+      color: #56d364;
+    }
+  }
+  code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 0.25rem;
   }
 </style>

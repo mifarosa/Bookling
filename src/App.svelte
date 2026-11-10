@@ -23,33 +23,49 @@
 
   const section = $derived(route.parts[0] || 'library');
 
+  // "Import" lives under the Library tab, so keep that tab highlighted there.
+  const activeTab = $derived(section === 'import' ? 'library' : section);
+
   const nav = [
-    { id: 'library', href: '#/', label: 'Library' },
-    { id: 'terms', href: '#/terms', label: 'Terms' },
-    { id: 'stats', href: '#/stats', label: 'Stats' },
-    { id: 'settings', href: '#/settings', label: 'Settings' }
+    { id: 'library', href: '#/', label: 'Kitaplık', icon: '📚' },
+    { id: 'terms', href: '#/terms', label: 'Kelimeler', icon: '🔤' },
+    { id: 'stats', href: '#/stats', label: 'İstatistik', icon: '📊' },
+    { id: 'settings', href: '#/settings', label: 'Ayarlar', icon: '⚙️' }
   ];
 </script>
 
 {#if section !== 'read'}
   <header>
     <a class="brand" href="#/">📖 Bookling</a>
-    <nav>
+    <nav aria-label="Ana menü">
       {#each nav as item}
-        <a href={item.href} class:active={section === item.id}>{item.label}</a>
+        <a
+          href={item.href}
+          class:active={activeTab === item.id}
+          aria-current={activeTab === item.id ? 'page' : undefined}
+        >
+          <span class="icon" aria-hidden="true">{item.icon}</span>
+          <span class="label">{item.label}</span>
+        </a>
       {/each}
     </nav>
-    <a class="coffee" href="https://www.buymeacoffee.com/mifarosa" target="_blank" rel="noopener">
-      ☕ Buy me a coffee
+    <a
+      class="coffee"
+      href="https://www.buymeacoffee.com/mifarosa"
+      target="_blank"
+      rel="noopener"
+      aria-label="Bana bir kahve ısmarla"
+    >
+      ☕ <span class="coffee-text">Kahve ısmarla</span>
     </a>
   </header>
 {/if}
 
-<main>
+<main class:with-nav={section !== 'read'}>
   {#if error}
-    <p class="page error">Could not open the local database: {error}</p>
+    <p class="page error">Yerel veritabanı açılamadı: {error}</p>
   {:else if !ready}
-    <p class="page muted">Loading…</p>
+    <p class="page muted" role="status">Yükleniyor…</p>
   {:else if section === 'read'}
     {#key route.parts[1]}
       <Reader bookId={Number(route.parts[1])} />
@@ -75,33 +91,42 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    padding: 0.6rem 1rem;
-    padding-top: max(0.6rem, env(safe-area-inset-top));
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    padding-top: max(0.5rem, env(safe-area-inset-top));
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
   .brand {
     font-weight: 700;
+    font-size: 1.05rem;
     text-decoration: none;
     color: var(--text);
+    white-space: nowrap;
   }
   nav {
     display: flex;
     gap: 0.25rem;
-    overflow-x: auto;
+    margin-right: auto;
   }
   nav a {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
     text-decoration: none;
     color: var(--muted);
-    padding: 0.35rem 0.6rem;
-    border-radius: 8px;
+    padding: 0.45rem 0.75rem;
+    border-radius: 10px;
     white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  nav a:hover {
+    color: var(--text);
   }
   nav a.active {
-    color: var(--text);
-    background: var(--bg);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-weight: 600;
   }
   .coffee {
     display: inline-flex;
@@ -111,8 +136,8 @@
     font-size: 0.85rem;
     font-weight: 600;
     white-space: nowrap;
-    padding: 0.35rem 0.7rem;
-    border-radius: 8px;
+    padding: 0.4rem 0.7rem;
+    border-radius: 10px;
     color: #3d2b00;
     background: #ffdd57;
     border: 1px solid #e8c547;
@@ -120,5 +145,50 @@
   }
   .coffee:hover {
     filter: brightness(1.05);
+  }
+
+  /* Phones: the menu becomes a bottom tab bar, within thumb's reach. */
+  @media (max-width: 639px) {
+    .coffee-text {
+      display: none;
+    }
+    nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 15;
+      margin: 0;
+      gap: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    nav a {
+      flex: 1;
+      flex-direction: column;
+      gap: 0.1rem;
+      padding: 0.5rem 0.25rem;
+      border-radius: 0;
+      font-size: 0.72rem;
+      background: transparent;
+    }
+    nav a.active {
+      background: transparent;
+    }
+    nav a .icon {
+      font-size: 1.3rem;
+      line-height: 1.2;
+    }
+  }
+
+  main.with-nav {
+    min-height: calc(100dvh - 3.2rem);
+  }
+  @media (max-width: 639px) {
+    main.with-nav {
+      /* room for the fixed bottom tab bar */
+      padding-bottom: calc(4.2rem + env(safe-area-inset-bottom));
+    }
   }
 </style>

@@ -50,7 +50,7 @@ function sanitizeCandidate(raw, queryLength) {
 /** Fetches (and caches) the raw MyMemory response for one lookup. */
 async function lookup(text, sourceCode, targetCode, { signal } = {}) {
   const q = text.trim();
-  if (!sourceCode || !targetCode) throw new TranslateError('This language has no translate-to code set.');
+  if (!sourceCode || !targetCode) throw new TranslateError('Bu dil için çeviri dili ayarlanmamış (Ayarlar → Çeviri dili).');
 
   const key = cacheKey(q, sourceCode, targetCode);
   if (cache.has(key)) return cache.get(key);
@@ -63,9 +63,9 @@ async function lookup(text, sourceCode, targetCode, { signal } = {}) {
       res = await fetch(url, { signal });
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
-      throw new TranslateError('Could not reach the translation service (are you offline?).');
+      throw new TranslateError('Çeviri servisine ulaşılamadı (çevrimdışı olabilirsin).');
     }
-    if (!res.ok) throw new TranslateError(`Translation service returned ${res.status}.`);
+    if (!res.ok) throw new TranslateError(`Çeviri servisi hata döndürdü (${res.status}).`);
     const data = await res.json();
     cache.set(key, data);
     return data;
@@ -120,7 +120,7 @@ async function bestCandidates(text, sourceCode, targetCode, opts) {
 export async function translateText(text, sourceCode, targetCode, opts = {}) {
   if (!text.trim()) return '';
   const [best] = await bestCandidates(text, sourceCode, targetCode, opts);
-  if (!best) throw new TranslateError('No translation found.');
+  if (!best) throw new TranslateError('Çeviri bulunamadı.');
   return best;
 }
 
